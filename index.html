@@ -1,69 +1,254 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="black" />
-
-  <title>Heads Up Web</title>
-  <style>
-    body {
-      font-family: sans-serif;
-      text-align: center;
-      background: #f0f0f0;
-      margin: 0;
-      padding: 2rem;
-    }
-    #word {
-      font-size: 3rem;
-      margin: 3rem 0;
-    }
-    #timer {
-      font-size: 2rem;
-      margin-bottom: 1rem;
-    }
-    button {
-      font-size: 1.5rem;
-      padding: 1rem 2rem;
-    }
-  </style>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black" />
+<title>Heads Up Web</title>
+<style>
+  body {
+    font-family: sans-serif;
+    text-align: center;
+    margin: 0; padding: 0;
+    background: #f0f0f0;
+    overflow: hidden;
+  }
+  #app {
+    padding: 1rem;
+    max-width: 600px;
+    margin: auto;
+  }
+  h1 {
+    margin-top: 1rem;
+  }
+  .hidden { display: none; }
+  button {
+    font-size: 1.5rem;
+    padding: 1rem 2rem;
+    margin: 0.5rem;
+    border: none;
+    border-radius: 8px;
+    background: #4caf50;
+    color: white;
+    cursor: pointer;
+    user-select: none;
+  }
+  button:disabled {
+    background: #999;
+    cursor: not-allowed;
+  }
+  #word {
+    font-size: 3rem;
+    margin: 3rem 0;
+    min-height: 4rem;
+  }
+  #timer, #score {
+    font-size: 1.8rem;
+    margin: 1rem 0;
+  }
+  select {
+    font-size: 1.3rem;
+    padding: 0.3rem;
+  }
+  #tilt-status {
+    margin-top: 1rem;
+    font-weight: bold;
+    color: #333;
+    min-height: 2rem;
+  }
+</style>
 </head>
 <body>
-  <h1>Heads Up!</h1>
-  <div id="timer">60</div>
-  <div id="word">Press Start</div>
-  <button onclick="startGame()">Start</button>
-  <button onclick="nextWord()" style="display:none" id="nextBtn">Next</button>
+  <div id="app">
+    <!-- HOME SCREEN -->
+    <div id="home-screen">
+      <h1>Heads Up!</h1>
+      <p>Select a category:</p>
+      <select id="category-select">
+        <option value="animals">Animals</option>
+        <option value="movies">Movies</option>
+        <option value="foods">Foods</option>
+      </select>
+      <br />
+      <button id="start-btn">Start Game</button>
+    </div>
 
-  <script>
-    const words = [
-      "Elephant", "Spider-Man", "Banana", "Airplane", "Lion",
-      "Basketball", "Submarine", "Pizza", "Guitar", "Moonwalk"
-    ];
-    let timer = 60;
-    let score = 0;
-    let interval;
+    <!-- GAME SCREEN -->
+    <div id="game-screen" class="hidden">
+      <div id="timer">Time: 60</div>
+      <div id="score">Score: 0</div>
+      <div id="word">Get Ready!</div>
+      <div id="tilt-status">Tilt phone down: Correct | Tilt phone up: Pass</div>
+      <button id="next-btn" disabled>Next Word</button>
+      <button id="end-btn">End Game</button>
+    </div>
 
-    function startGame() {
-      document.getElementById('nextBtn').style.display = "inline-block";
-      nextWord();
-      score = 0;
-      timer = 60;
-      interval = setInterval(() => {
-        timer--;
-        document.getElementById("timer").innerText = timer;
-        if (timer <= 0) {
-          clearInterval(interval);
-          document.getElementById("word").innerText = `Time's up! Score: ${score}`;
-          document.getElementById('nextBtn').style.display = "none";
-        }
-      }, 1000);
+    <!-- GAME OVER SCREEN -->
+    <div id="game-over-screen" class="hidden">
+      <h1>Game Over!</h1>
+      <p id="final-score"></p>
+      <button id="play-again-btn">Play Again</button>
+    </div>
+  </div>
+
+<script>
+(() => {
+  const categories = {
+    animals: [
+      "Elephant", "Tiger", "Kangaroo", "Penguin", "Giraffe",
+      "Spider", "Dog", "Cat", "Dolphin", "Butterfly"
+    ],
+    movies: [
+      "Titanic", "Inception", "Avengers", "Jumanji", "Frozen",
+      "Matrix", "Joker", "Up", "Gladiator", "Avatar"
+    ],
+    foods: [
+      "Pizza", "Sushi", "Burger", "Pasta", "Chocolate",
+      "Ice Cream", "Salad", "Taco", "Steak", "Pancake"
+    ]
+  };
+
+  let selectedCategory = 'animals';
+  let words = [];
+  let currentWordIndex = 0;
+  let score = 0;
+  let timer = 60;
+  let timerInterval = null;
+  let gameActive = false;
+  let lastTilt = null;
+
+  // UI elements
+  const homeScreen = document.getElementById('home-screen');
+  const gameScreen = document.getElementById('game-screen');
+  const gameOverScreen = document.getElementById('game-over-screen');
+  const categorySelect = document.getElementById('category-select');
+  const startBtn = document.getElementById('start-btn');
+  const wordDisplay = document.getElementById('word');
+  const timerDisplay = document.getElementById('timer');
+  const scoreDisplay = document.getElementById('score');
+  const nextBtn = document.getElementById('next-btn');
+  const endBtn = document.getElementById('end-btn');
+  const finalScoreText = document.getElementById('final-score');
+  const playAgainBtn = document.getElementById('play-again-btn');
+  const tiltStatus = document.getElementById('tilt-status');
+
+  function shuffle(array) {
+    // Fisher-Yates shuffle
+    for (let i = array.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [array[i], array[j]] = [array[j], array[i]];
+    }
+  }
+
+  function startGame() {
+    selectedCategory = categorySelect.value;
+    words = [...categories[selectedCategory]];
+    shuffle(words);
+    currentWordIndex = 0;
+    score = 0;
+    timer = 60;
+    gameActive = true;
+
+    homeScreen.classList.add('hidden');
+    gameOverScreen.classList.add('hidden');
+    gameScreen.classList.remove('hidden');
+    nextBtn.disabled = true;
+    updateScore();
+    updateTimer();
+    showWord(words[currentWordIndex]);
+
+    // Start countdown
+    timerInterval = setInterval(() => {
+      timer--;
+      updateTimer();
+      if (timer <= 0) {
+        endGame();
+      }
+    }, 1000);
+
+    // Start listening for tilt events
+    window.addEventListener('deviceorientation', handleTilt);
+  }
+
+  function showWord(word) {
+    wordDisplay.textContent = word;
+  }
+
+  function updateTimer() {
+    timerDisplay.textContent = `Time: ${timer}`;
+  }
+
+  function updateScore() {
+    scoreDisplay.textContent = `Score: ${score}`;
+  }
+
+  function nextWord() {
+    if (!gameActive) return;
+    currentWordIndex++;
+    if (currentWordIndex >= words.length) {
+      // Reshuffle and restart deck if all words done
+      shuffle(words);
+      currentWordIndex = 0;
+    }
+    showWord(words[currentWordIndex]);
+    nextBtn.disabled = true;
+    lastTilt = null;
+  }
+
+  function endGame() {
+    gameActive = false;
+    clearInterval(timerInterval);
+    window.removeEventListener('deviceorientation', handleTilt);
+    gameScreen.classList.add('hidden');
+    gameOverScreen.classList.remove('hidden');
+    finalScoreText.textContent = `Your final score: ${score}`;
+  }
+
+  function handleTilt(event) {
+    if (!gameActive) return;
+    const beta = event.beta; // front-back tilt, -180 to 180 (down = positive)
+
+    // console.log('Tilt beta:', beta);
+
+    if (lastTilt === null) {
+      lastTilt = beta;
+      return;
     }
 
-    function nextWord() {
-      const randomWord = words[Math.floor(Math.random() * words.length)];
-      document.getElementById("word").innerText = randomWord;
+    // Tilt down (correct): beta > 45
+    if (beta > 45 && lastTilt <= 45) {
       score++;
+      updateScore();
+      nextBtn.disabled = false;
+      tiltStatus.textContent = "✅ Correct! Tap Next or tilt again.";
+      lastTilt = beta;
+      return;
     }
-  </script>
+
+    // Tilt up (pass): beta < -45
+    if (beta < -45 && lastTilt >= -45) {
+      tiltStatus.textContent = "⏭️ Passed! Tap Next or tilt again.";
+      nextBtn.disabled = false;
+      lastTilt = beta;
+      return;
+    }
+
+    lastTilt = beta;
+  }
+
+  // Button event listeners
+  startBtn.addEventListener('click', startGame);
+  nextBtn.addEventListener('click', () => {
+    nextWord();
+    tiltStatus.textContent = "Tilt phone down: Correct | Tilt phone up: Pass";
+  });
+  endBtn.addEventListener('click', endGame);
+  playAgainBtn.addEventListener('click', () => {
+    homeScreen.classList.remove('hidden');
+    gameOverScreen.classList.add('hidden');
+  });
+})();
+</script>
 </body>
 </html>
