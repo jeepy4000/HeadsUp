@@ -29,7 +29,7 @@
     margin: 0.5rem;
     border: none;
     border-radius: 8px;
-    background: #e53935;
+    background: #1e88e5; /* Updated blue shade */
     color: white;
     cursor: pointer;
     user-select: none;
@@ -72,7 +72,7 @@
       </select>
       <br />
       <button id="start-btn">Start Game</button>
-      <p style="font-size: 0.9rem; margin-top:1rem; color:#666;">* On iOS, you will be asked to allow motion access</p>
+      <p style="font-size: 0.9rem; margin-top:1rem; color:#666;">* iOS may ask for motion permission</p>
     </div>
 
     <!-- GAME SCREEN -->
@@ -118,6 +118,7 @@
   let timerInterval = null;
   let gameActive = false;
 
+  // For tilt debouncing
   let lastTiltTime = 0;
   const TILT_COOLDOWN_MS = 1500;
 
@@ -130,18 +131,62 @@
   const wordDisplay = document.getElementById('word');
   const timerDisplay = document.getElementById('timer');
   const scoreDisplay = document.getElementById('score');
-  const tiltStatus = document.getElementById('tilt-status');
   const nextBtn = document.getElementById('next-btn');
   const endBtn = document.getElementById('end-btn');
-  const finalScoreDisplay = document.getElementById('final-score');
+  const tiltStatus = document.getElementById('tilt-status');
+  const finalScore = document.getElementById('final-score');
   const playAgainBtn = document.getElementById('play-again-btn');
 
-  // Shuffle array
   function shuffleArray(arr) {
     for (let i = arr.length -1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i+1));
       [arr[i], arr[j]] = [arr[j], arr[i]];
     }
+  }
+
+  function startGame() {
+    selectedCategory = categorySelect.value;
+    words = categories[selectedCategory].slice();
+    shuffleArray(words);
+    currentWordIndex = 0;
+    score = 0;
+    timer = 60;
+    gameActive = true;
+    nextBtn.disabled = true;
+
+    homeScreen.classList.add('hidden');
+    gameOverScreen.classList.add('hidden');
+    gameScreen.classList.remove('hidden');
+
+    updateWord();
+    updateScore();
+    updateTimer();
+
+    timerInterval = setInterval(() => {
+      timer--;
+      updateTimer();
+      if (timer <= 0) {
+        endGame();
+      }
+    }, 1000);
+  }
+
+  function endGame() {
+    gameActive = false;
+    clearInterval(timerInterval);
+    gameScreen.classList.add('hidden');
+    gameOverScreen.classList.remove('hidden');
+    finalScore.textContent = `Your final score is ${score}!`;
+  }
+
+  function updateWord() {
+    if (currentWordIndex >= words.length) {
+      // reshuffle and reset index if out of words
+      shuffleArray(words);
+      currentWordIndex = 0;
+    }
+    wordDisplay.textContent = words[currentWordIndex];
+    nextBtn.disabled = true;
   }
 
   function updateScore() {
@@ -152,116 +197,66 @@
     timerDisplay.textContent = `Time: ${timer}`;
   }
 
-  function showWord(word) {
-    wordDisplay.textContent = word;
-  }
-
   function nextWord() {
     currentWordIndex++;
-    if (currentWordIndex >= words.length) {
-      endGame();
-      return;
-    }
-    showWord(words[currentWordIndex]);
-    nextBtn.disabled = true;
+    updateWord();
   }
 
-  function endGame() {
-    gameActive = false;
-    clearInterval(timerInterval);
-    window.removeEventListener('deviceorientation', handleTilt);
-    gameScreen.classList.add('hidden');
-    gameOverScreen.classList.remove('hidden');
-    finalScoreDisplay.textContent = `Your final score is ${score}`;
-  }
-
-  function startTimer() {
-    timerInterval = setInterval(() => {
-      timer--;
-      updateTimer();
-      if (timer <= 0) {
-        endGame();
-      }
-    }, 1000);
-  }
-
-  // The tilt event handler
   function handleTilt(event) {
     if (!gameActive) return;
     const now = Date.now();
     if (now - lastTiltTime < TILT_COOLDOWN_MS) return;
 
-    let beta = event.beta; // front-to-back tilt [-180 to 180]
+    let beta = event.beta;   // front-to-back tilt [-180 to 180]
+    let gamma = event.gamma; // left-to-right tilt [-90 to 90]
 
-    if (beta === null || beta === undefined) return;
+    if (beta === null || beta === undefined || gamma === null || gamma === undefined) return;
 
-    if (beta > 15) {
+    // Ignore if device is tilted sideways too much (gamma too big)
+    if (Math.abs(gamma) > 20) return; // ignore if tilted left/right more than 20 degrees
+
+    // Increased tilt thresholds to reduce accidental triggers
+    const TILT_DOWN_THRESHOLD = 30;  // tilt down past 30 degrees to mark correct
+    const TILT_UP_THRESHOLD = -30;   // tilt up past -30 degrees to pass
+
+    if (beta > TILT_DOWN_THRESHOLD) {
       // Tilt down = correct answer
       score++;
       updateScore();
       nextBtn.disabled = false;
       lastTiltTime = now;
-    } else if (beta < -15) {
+    } else if (beta < TILT_UP_THRESHOLD) {
       // Tilt up = pass
       nextBtn.disabled = false;
       lastTiltTime = now;
     }
   }
 
-  // Request permission for iOS motion events
-  async function requestMotionPermission() {
-    if (
-      typeof DeviceMotionEvent !== 'undefined' &&
-      typeof DeviceMotionEvent.requestPermission === 'function'
-    ) {
-      try {
-        const response = await DeviceMotionEvent.requestPermission();
+  // Event Listeners
+  startBtn.addEventListener('click', () => {
+    // On iOS, request permission for motion events if needed
+    if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
+      DeviceMotionEvent.requestPermission().then(response => {
         if (response === 'granted') {
           window.addEventListener('deviceorientation', handleTilt);
-          initGame();
+          startGame();
         } else {
-          alert('Motion permission denied. Tilt controls won\'t work.');
-          initGame();
+          alert('Motion permission denied. You can still play manually.');
+          startGame();
         }
-      } catch (e) {
-        alert('Error requesting motion permission: ' + e);
-        initGame();
-      }
+      }).catch(() => {
+        alert('Motion permission denied. You can still play manually.');
+        startGame();
+      });
     } else {
-      // No permission request needed (Android, desktop, etc)
       window.addEventListener('deviceorientation', handleTilt);
-      initGame();
+      startGame();
     }
-  }
-
-  // Initialize game variables and start timer
-  function initGame() {
-    selectedCategory = categorySelect.value;
-    words = [...categories[selectedCategory]];
-    shuffleArray(words);
-    currentWordIndex = 0;
-    score = 0;
-    timer = 60;
-    gameActive = true;
-
-    homeScreen.classList.add('hidden');
-    gameOverScreen.classList.add('hidden');
-    gameScreen.classList.remove('hidden');
-    nextBtn.disabled = true;
-
-    updateScore();
-    updateTimer();
-    showWord(words[currentWordIndex]);
-    startTimer();
-  }
-
-  // Button event listeners
-  startBtn.addEventListener('click', () => {
-    requestMotionPermission();
   });
 
   nextBtn.addEventListener('click', () => {
     nextWord();
+    nextBtn.disabled = true;
   });
 
   endBtn.addEventListener('click', () => {
@@ -273,6 +268,9 @@
     gameOverScreen.classList.add('hidden');
   });
 
+  categorySelect.addEventListener('change', () => {
+    selectedCategory = categorySelect.value;
+  });
 })();
 </script>
 </body>
