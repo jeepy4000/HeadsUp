@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Heads Up Web</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      text-align: center;
+      background: #f0f0f0;
+      margin: 0;
+      padding: 2rem;
+    }
+    #word {
+      font-size: 3rem;
+      margin: 3rem 0;
+    }
+    #timer {
+      font-size: 2rem;
+      margin-bottom: 1rem;
+    }
+    button {
+      font-size: 1.5rem;
+      padding: 1rem 2rem;
+    }
+  </style>
+</head>
+<body>
+  <h1>Heads Up!</h1>
+  <div id="timer">60</div>
+  <div id="word">Press Start</div>
+  <button onclick="startGame()">Start</button>
+  <button onclick="nextWord()" style="display:none" id="nextBtn">Next</button>
+
+  <script>
+    const words = [
+      "Elephant", "Spider-Man", "Banana", "Airplane", "Lion",
+      "Basketball", "Submarine", "Pizza", "Guitar", "Moonwalk"
+    ];
+    let timer = 60;
+    let score = 0;
+    let interval;
+
+    function startGame() {
+      document.getElementById('nextBtn').style.display = "inline-block";
+      nextWord();
+      score = 0;
+      timer = 60;
+      interval = setInterval(() => {
+        timer--;
+        document.getElementById("timer").innerText = timer;
+        if (timer <= 0) {
+          clearInterval(interval);
+          document.getElementById("word").innerText = `Time's up! Score: ${score}`;
+          document.getElementById('nextBtn').style.display = "none";
+        }
+      }, 1000);
+    }
+
+    function nextWord() {
+      const randomWord = words[Math.floor(Math.random() * words.length)];
+      document.getElementById("word").innerText = randomWord;
+      score++;
+    }
+  </script>
+</body>
+</html>
